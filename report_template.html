@@ -362,7 +362,7 @@
             <h1>{{ metadata.regulation_name }}</h1>
             <div class="subtitle">{{ metadata.brief_description }}</div>
             {% if metadata.docket_id %}
-            <div><a href="https://www.regulations.gov/docket/{{ metadata.docket_id }}" target="_blank">{{ metadata.agency }} Docket: {{ metadata.docket_id }}</a></div>
+            <div><a href="{{ docket_url }}" target="_blank">{{ metadata.agency }} Docket: {{ metadata.docket_id }}</a></div>
             {% endif %}
             {% if accuracy_page_url %}
             <a href="{{ accuracy_page_url }}" class="rule-callout accuracy-callout">
@@ -374,13 +374,7 @@
             </a>
             {% endif %}
             {% if rule_page_url %}
-            <a href="{{ rule_page_url }}" class="rule-callout">
-                <span class="rule-callout-icon">📖</span>
-                <span class="rule-callout-body">
-                    <span class="rule-callout-title">Read the Rule &rarr;</span>
-                    <span class="rule-callout-text">Browse the proposed rule text section by section and see which comments cite each §200.xx — colored by whether they support or oppose.</span>
-                </span>
-            </a>
+            
             {% endif %}
         </div>
 
@@ -450,24 +444,54 @@
         </div>
         {% endif %}
 
+        <!-- Position (a regulation's own bipolar axis, e.g. "favors deregulation"
+             vs. "favors stronger safety rules" -- distinct from the built-in
+             Oppose/Support stat cards above, which only apply when a stance is
+             literally named "Position: Oppose"/"Position: Support". Suppressed
+             when those stat cards are already showing, so the two never appear
+             together for the same axis. -->
+        {% if not show_stance_cards and briefing.position_counts %}
+        <div class="section" id="positionSection">
+            <h2><i class="fas fa-scale-balanced"></i> Position</h2>
+            {% for position in briefing.position_counts %}
+            <div class="concern-row">
+                <div class="concern-label">{{ position.name }}</div>
+                <div class="concern-bar-bg">
+                    <div class="concern-bar" style="width: {{ position.pct }}%;"></div>
+                    <span class="concern-count-outside" style="left: {{ (position.pct + 1) }}%;">{{ "{:,}".format(position.count) }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         <!-- Top Concerns -->
-        {% if show_stance_cards %}
+        {% if briefing.concern_counts %}
         <div class="section" id="concernsSection">
             <h2><i class="fas fa-exclamation-circle"></i> Top Concerns</h2>
+            {% if show_stance_cards %}
             <div class="legend">
                 <span class="legend-item"><span class="legend-swatch" style="background: var(--color-oppose);"></span> Oppose</span>
                 <span class="legend-item"><span class="legend-swatch" style="background: var(--color-support);"></span> Support</span>
                 <span class="legend-item" style="color: var(--color-text-muted);">Click a concern to filter the table</span>
             </div>
+            {% else %}
+            <p style="color: var(--color-text-muted); font-size:0.85rem; margin-bottom:1rem;">Click a concern to filter the table.</p>
+            {% endif %}
             {% for concern in briefing.concern_counts %}
             <div class="concern-row" style="cursor:pointer;" data-concern="{{ concern.name | e }}" title="Filter comments to this concern">
                 <div class="concern-label">{{ concern.name }}</div>
                 <div class="concern-bar-bg">
+                    {% if show_stance_cards %}
                     <div class="concern-bar-stacked" style="width: {{ concern.pct }}%;">
                         <div class="seg-oppose" style="width: {{ concern.oppose_pct }}%;"></div>
                         <div class="seg-support" style="width: {{ concern.support_pct }}%;"></div>
                     </div>
                     <span class="concern-count-outside" style="left: {{ (concern.pct + 1) }}%;">{{ "{:,}".format(concern.count) }} &middot; {{ concern.oppose_pct }}% oppose / {{ concern.support_pct }}% support</span>
+                    {% else %}
+                    <div class="concern-bar" style="width: {{ concern.pct }}%;"></div>
+                    <span class="concern-count-outside" style="left: {{ (concern.pct + 1) }}%;">{{ "{:,}".format(concern.count) }}</span>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}
@@ -478,21 +502,27 @@
         <div class="section" id="campaignsSection">
             <h2><i class="fas fa-copy"></i> Form Letter Campaigns</h2>
             <p style="color: var(--color-text-muted); font-size:0.85rem; margin-bottom:1rem;">
-                {{ "{:,}".format(briefing.campaign_comments_count) }} comments ({{ (briefing.campaign_comments_count / briefing.total_comments * 100) | round | int }}%) detected across {{ briefing.campaign_count }} form letter campaigns using text similarity analysis. Bar color shows each campaign's aggregated member stance. Click a bar to see the canonical version.
+                {{ "{:,}".format(briefing.campaign_comments_count) }} comments ({{ (briefing.campaign_comments_count / briefing.total_comments * 100) | round | int }}%) detected across {{ briefing.campaign_count }} form letter campaigns using text similarity analysis. {% if show_stance_cards %}Bar color shows each campaign's aggregated member stance. {% endif %}Click a bar to see the canonical version.
             </p>
+            {% if show_stance_cards %}
             <div class="legend">
                 <span class="legend-item"><span class="legend-swatch" style="background: var(--color-oppose);"></span> Oppose</span>
                 <span class="legend-item"><span class="legend-swatch" style="background: var(--color-support);"></span> Support</span>
             </div>
+            {% endif %}
             {% for campaign in briefing.campaigns_list[:15] %}
             <div class="concern-row" style="cursor:pointer;" onclick="showCampaignModal({{ campaign.id }})" title="Campaign #{{ campaign.rank }} — {{ "{:,}".format(campaign.size) }} comments">
                 <div class="concern-label" style="width:240px; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500;">{% if campaign.snippet %}<span class="text-muted">#{{ campaign.rank }}</span> {{ campaign.snippet }}{% else %}Campaign {{ campaign.rank }}{% endif %}</div>
                 <div class="concern-bar-bg">
                     {% set pct = (campaign.size / briefing.total_comments * 100) %}
+                    {% if show_stance_cards %}
                     <div class="concern-bar-stacked" style="width: {{ pct }}%;">
                         <div class="seg-oppose" style="width: {{ campaign.oppose_pct }}%;"></div>
                         <div class="seg-support" style="width: {{ campaign.support_pct }}%;"></div>
                     </div>
+                    {% else %}
+                    <div class="concern-bar" style="width: {{ pct }}%;"></div>
+                    {% endif %}
                     <span class="concern-count-outside" style="left: {{ (pct + 1) }}%;">{{ "{:,}".format(campaign.size) }} similar ({{ "{:,}".format(campaign.exact_dupes) }} exact)</span>
                 </div>
             </div>
@@ -738,6 +768,19 @@
 
     <!-- Modal helpers -->
     <script>
+        // Where the "ID" links across the report point to. Defaults to the
+        // regulations.gov comment permalink; a regulation whose source isn't
+        // regulations.gov (e.g. an RFI whose responses are posted elsewhere as
+        // one PDF per submission) sets report.comment_url_template in
+        // analyzer_config.yaml to override this, with {id} as the placeholder.
+        var COMMENT_URL_TEMPLATE = {{ comment_url_template | tojson }};
+        function commentUrl(id) {
+            // Strip a '#TRACKINGNUMBER' suffix pipeline.py appends to disambiguate
+            // duplicate Document IDs -- the source file on disk never had it.
+            var bare = String(id).split('#')[0];
+            return COMMENT_URL_TEMPLATE.replace('{id}', encodeURIComponent(bare));
+        }
+
         function escapeHtml(s) {
             const d = document.createElement('div');
             d.textContent = s == null ? '' : s;
@@ -765,7 +808,7 @@
                 comments.forEach(function(e) {
                     html += '<tr><td>' + e.name + '</td>';
                     html += '<td style="font-size:0.82rem; max-width:400px;">' + (e.sentence || '-') + '</td>';
-                    html += '<td><a href="https://www.regulations.gov/comment/' + e.id + '" target="_blank">' + e.id.split('-').pop() + '</a></td></tr>';
+                    html += '<td><a href="' + commentUrl(e.id) + '" target="_blank">' + e.id.split('-').pop() + '</a></td></tr>';
                 });
                 html += '</tbody></table>';
             }
@@ -805,7 +848,7 @@
             } else {
                 html += '<table class="table table-sm table-hover"><thead><tr><th>Submitter</th><th>Match</th><th>Comment</th></tr></thead><tbody>';
                 fs.comments.forEach(function(e) {
-                    // Open our own copy rather than relying on regulations.gov:
+                    // Open our own copy rather than relying on the external source:
                     // a withdrawn comment is gone from there, and ours is the
                     // only remaining record of what it said.
                     var idx = commentIndexById[e.id];
@@ -815,14 +858,14 @@
                     // official record, and that blank record is worth seeing.
                     var action = clickable
                         ? 'openCommentFromEntity(' + idx + ')'
-                        : "window.open('https://www.regulations.gov/comment/" + encodeURIComponent(e.id) + "', '_blank')";
+                        : "window.open('" + commentUrl(e.id) + "', '_blank')";
                     var hint = clickable
                         ? 'Click to see the full comment'
-                        : 'No copy of the text exists — open the official record on regulations.gov';
+                        : 'No copy of the text exists — open the source document';
                     html += '<tr class="clickable-row" style="cursor:pointer;" onclick="' + action + '" title="' + hint + '">';
                     html += '<td>' + escapeHtml(e.name) + '</td>';
                     html += '<td style="font-size:0.82rem; max-width:400px;"><em>' + escapeHtml(e.sentence || '-') + '</em></td>';
-                    html += '<td><a href="https://www.regulations.gov/comment/' + e.id + '" target="_blank" onclick="event.stopPropagation();">' + e.id.split('-').pop() + '</a></td></tr>';
+                    html += '<td><a href="' + commentUrl(e.id) + '" target="_blank" onclick="event.stopPropagation();">' + e.id.split('-').pop() + '</a></td></tr>';
                 });
                 html += '</tbody></table>';
             }
@@ -846,7 +889,7 @@
             html += '<div style="font-size:0.8rem; color:var(--color-text-muted);">';
             campaign.sample_ids.forEach(function(id, j) {
                 if (j > 0) html += ', ';
-                html += '<a href="https://www.regulations.gov/comment/' + id + '" target="_blank">' + id.split('-').pop() + '</a>';
+                html += '<a href="' + commentUrl(id) + '" target="_blank">' + id.split('-').pop() + '</a>';
             });
             if (campaign.size > campaign.sample_ids.length) {
                 html += ' <span class="text-muted">+ ' + (campaign.size - campaign.sample_ids.length).toLocaleString() + ' more</span>';
@@ -878,7 +921,7 @@
                 html += '<tr><td><em>' + (s.quote || '-') + '</em></td>';
                 html += '<td>' + s.name + '</td>';
                 html += '<td>' + (s.entity_type || '') + '</td>';
-                html += '<td><a href="https://www.regulations.gov/comment/' + s.id + '" target="_blank">' + s.id.split('-').pop() + '</a></td></tr>';
+                html += '<td><a href="' + commentUrl(s.id) + '" target="_blank">' + s.id.split('-').pop() + '</a></td></tr>';
             });
             html += '</tbody></table>';
             document.getElementById('entityModalBody').innerHTML = html;
@@ -898,7 +941,7 @@
                 html += '<tr' + (clickable ? ' class="clickable-row" style="cursor:pointer;" onclick="openCommentFromEntity(' + idx + ')" title="Click to see full comment details"' : '') + '>';
                 html += '<td>' + identified + '</td>';
                 html += '<td>' + s.name + '</td>';
-                html += '<td><a href="https://www.regulations.gov/comment/' + s.id + '" target="_blank" onclick="event.stopPropagation();">' + s.id.split('-').pop() + '</a></td></tr>';
+                html += '<td><a href="' + commentUrl(s.id) + '" target="_blank" onclick="event.stopPropagation();">' + s.id.split('-').pop() + '</a></td></tr>';
             });
             html += '</tbody></table>';
             document.getElementById('entityModalBody').innerHTML = html;
@@ -1005,10 +1048,10 @@
                 + '</div>';
 
             if (c.has_attachment) {
-                html += '<div class="mt-2"><span class="text-muted" style="font-size:0.82rem;"><i class="fas fa-paperclip"></i> Has attachment — view full text on regulations.gov</span></div>';
+                html += '<div class="mt-2"><span class="text-muted" style="font-size:0.82rem;"><i class="fas fa-paperclip"></i> Has attachment — view full text at the source</span></div>';
             }
 
-            html += '<div class="mt-3"><a href="https://www.regulations.gov/comment/' + c.id + '" target="_blank" class="btn btn-sm btn-primary">View on Regulations.gov</a></div>';
+            html += '<div class="mt-3"><a href="' + commentUrl(c.id) + '" target="_blank" class="btn btn-sm btn-primary">View source document</a></div>';
 
             const body = document.getElementById('commentModalBody');
             body.setAttribute('data-comment-idx', String(idx));
@@ -1069,7 +1112,7 @@
         // attaches a +Add-filter dimension (gated by the field's `filter` show).
         const COLUMN_SPECS = [
             { key: 'id', title: 'ID',
-              cell: function (c) { return '<a href="https://www.regulations.gov/comment/' + c.id + '" target="_blank" onclick="event.stopPropagation();">' + c.id.split('-').pop() + '</a>'; } },
+              cell: function (c) { return '<a href="' + commentUrl(c.id) + '" target="_blank" onclick="event.stopPropagation();">' + c.id.split('-').pop() + '</a>'; } },
             // The column is the SUBMITTED date. "Date" alone was ambiguous, and it
             // showed the posted date — which on a closed docket runs weeks past the
             // comment deadline and reads as nonsense to anyone taking it for when
@@ -1081,7 +1124,7 @@
               cell: function (c) { return c.received_date; },
               filter: { name: 'Submitted Date', type: 'daterange',
                         value: function (c) { return c.received_date; } } },
-            { key: 'submitter', title: 'Submitter',
+            { key: 'submitter', title: 'Submitter', enabled: {{ show_submitter_column | tojson }},
               cell: function (c) { return escapeHtml(c.submitter) + (c.organization ? ' <span class="text-muted" style="font-size:11px;">(' + escapeHtml(c.organization) + ')</span>' : ''); },
               // Text, not multiselect: there is very nearly one distinct submitter
               // per comment, so enumerating every value would build a list as long
@@ -1094,7 +1137,7 @@
             { key: 'state', title: fieldLabel('state_identified', 'State'), enabled: showsField('state_identified', 'column'),
               cell: function (c) { return escapeHtml(c.state || ''); },
               filter: showsField('state_identified', 'filter') ? { name: fieldLabel('state_identified', 'State'), vals: function (c) { return c.state ? [c.state] : []; } } : null },
-            { key: 'position', title: 'Position', orderable: false, enabled: showsField('stances', 'column'),
+            { key: 'position', title: 'Position', orderable: false, enabled: showsField('stances', 'column') && {{ show_position_column | tojson }},
               cell: function (c) { return cPositions(c).map(function (p) {
                   var cls = p.indexOf('Oppose') >= 0 ? 'pos-oppose' : (p.indexOf('Support') >= 0 ? 'pos-support' : 'pos-unclear');
                   return '<span class="stance-tag tag-position ' + cls + '">' + escapeHtml(p) + '</span>';

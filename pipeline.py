@@ -142,6 +142,13 @@ def _stance_bucket(analysis: Any) -> str:
 
 def read_comments_from_csv(csv_file: str, limit: Optional[int] = None, sample_size: Optional[int] = None, random_seed: int = 42, use_gemini: bool = False) -> List[Dict[str, Any]]:
     """Read comments from CSV file and return as list of dicts."""
+    # Python's csv module caps a single field at 128KB by default, as a guard
+    # against malformed files. A regulations.gov bulk export rarely hits it --
+    # its Comment column is short web-form text -- but a source CSV built by
+    # writing a whole PDF's extracted text into one field (e.g. build_source_csv.py)
+    # routinely exceeds it on a long, formal submission. prefetch_attachments.py
+    # already raises this same limit elsewhere in this codebase for the same reason.
+    csv.field_size_limit(sys.maxsize)
     logger.info(f"Reading comments from {csv_file}")
     
     # Set random seed for reproducibility
@@ -1506,6 +1513,24 @@ def main():
         # Step 4: Merge analysis results back to full dataset
         logger.info("=== STEP 4: Merging Results ===")
         analyzed_comments = merge_analysis_results(unique_analyzed_comments, duplicate_mapping)
+
+        # Backfill a blank 'submitter' from the LLM-extracted identity quote.
+        # Sources like NITRD's AI Action Plan PDFs carry no separate structured
+        # name/organization field the way a regulations.gov bulk export does, so
+        # 'submitter' starts empty for every row and the report would otherwise
+        # display every commenter -- including businesses and universities that
+        # plainly identify themselves in the text -- as "Anonymous". Only fills
+        # in what was actually blank; never overwrites a name that came from CSV.
+        backfilled = 0
+        for c in analyzed_comments:
+            if not (c.get('submitter') or '').strip():
+                entity_name = ((c.get('analysis') or {}).get('entity_name') or '').strip()
+                if entity_name:
+                    c['submitter'] = entity_name
+                    backfilled += 1
+        if backfilled:
+            logger.info(f"Backfilled 'submitter' from entity_name for {backfilled:,} comment(s) "
+                       f"that had no name/organization in the source CSV")
 
         # Save after merge so LLM work is never lost
         logger.info("=== Saving intermediate results ===")

@@ -1,0 +1,217 @@
+# Analyzer Configuration — OMB Regulation for Federal Financial Assistance
+# Defines what the LLM looks for when analyzing each comment.
+# Stance taxonomy grounded in a sample of the actual comments on this docket.
+
+regulation_name: "AI Action Plan (90 FR 9088)"
+regulation_description: >
+  The strategy aims to fast-track technological advancement through deregulation, heavy infrastructure investment, and international alliances.
+
+# -------------------------------------------------------------------
+# Positions & Concerns — the model tags each comment with ALL that apply.
+# -------------------------------------------------------------------
+stances:
+  - name: "Position: Favors deregulation / lighter federal AI rules"
+    indicator: "Urges removing or avoiding AI-specific regulation, calls existing/state rules a barrier to innovation or competitiveness"
+  - name: "Position: Favors stronger AI safety or oversight rules"
+    indicator: "Urges new safeguards, testing, transparency, or accountability requirements before or alongside deployment"
+  - name: "Concern: Copyright / IP and AI training data"
+    indicator: "Raises copyright, fair use, licensing, or compensation for content used to train AI models"
+  - name: "Concern: Open-source / open-weight models"
+    indicator: "Advocates for or against open-sourcing model weights or supporting open AI research"
+  - name: "Concern: Energy, compute, or infrastructure investment"
+    indicator: "Discusses power/grid capacity, data centers, chips, or federal investment needed to build AI infrastructure"
+  - name: "Concern: U.S.-China competition / national security"
+    indicator: "Frames AI policy in terms of competing with China, export controls, or national security"
+  - name: "Concern: Jobs, workforce, or education"
+    indicator: "Discusses AI's effect on employment, job training, or the education system"
+  - name: "Concern: Civil rights, bias, or consumer harm"
+    indicator: "Raises algorithmic bias, discrimination, privacy, or consumer-protection harms from AI systems"
+  
+# -------------------------------------------------------------------
+# Entity Types — the model classifies each commenter into one category.
+# -------------------------------------------------------------------
+entity_types:
+  - "Individual/Other"
+  - "Think tanks/university research groups/research institutions and universities"
+  - "Non-profits/NGOs/charities"
+  - "Business/trade associations"
+  - "Government"
+  - "Other"
+
+entity_classification_rules: >
+  Default to Individual UNLESS the commenter explicitly self-identifies as
+  writing on behalf of an organization, or an Organization Name/letterhead in
+  the source makes clear the submission speaks for one. Writing knowledgeably
+  about AI does not, by itself, make someone anything other than an
+  Individual -- only a stated affiliation does.
+
+  Firm (Industry or Technology Company): a single for-profit company writing
+  on its own behalf -- e.g. "I am submitting this comment on behalf of
+  [Company]," a corporate letterhead, or a title (CEO, General Counsel,
+  policy lead) tied to one company. Covers technology companies and firms in
+  any other industry alike.
+
+  Think Tank / University or Research Institution: a named think tank,
+  research institute, or university/academic research group, OR an
+  individual who explicitly identifies as writing in their professional
+  capacity as a researcher, professor, or academic at such an institution
+  (e.g. "As a professor of computer science at [University]..."). An academic
+  writing with no stated institutional affiliation is an Individual, not this
+  category.
+
+  Non-Profit / NGO / Charity: a registered nonprofit, NGO, advocacy
+  organization, or charity -- distinct from a think tank (which does or
+  publishes research) and from a trade association (which represents member
+  businesses rather than a cause).
+
+  Business or Trade Association: an association, coalition, or chamber
+  representing multiple member companies or businesses across an industry,
+  not a single company's own interests. The test is scope: one company
+  speaking for itself is a Firm; an organization speaking on behalf of many
+  companies is this category.
+
+  Government: a federal, state, local, tribal, or foreign government agency,
+  or an elected or appointed official, writing in an official governmental
+  capacity.
+
+  Other: use only when the text makes clear the submitter is NOT an
+  individual person, but doesn't fit any category above (e.g. a labor union,
+  a political party, a media outlet, or an unidentifiable joint/coalition
+  submission). Never use Other as a default for an unclear or anonymous
+  submission -- that default is Individual.
+
+# -------------------------------------------------------------------
+# Additional Fields Extracted
+# -------------------------------------------------------------------
+additional_fields:
+  entity_name: >
+    Extract a VERBATIM quote from the text that justifies the entity type classification.
+    Must be an exact substring from anywhere in the text including submitter name or
+    organization. Leave empty if no identifying information.
+
+  state: >
+    If the submitter's US state can be identified from any clue in the text (city/state,
+    institution location, etc.), provide the two-letter abbreviation (e.g. CA, TX). Also
+    extract a verbatim quote justifying this. Leave both empty if no state can be determined.
+
+  political_affiliation: >
+    ONLY if the submitter explicitly self-identifies their political party (e.g. "as a
+    Republican", "registered Democrat", "as a hardcore conservative"). Do NOT infer from
+    policy positions. Leave empty if no explicit self-identification.
+
+  key_quote: >
+    The most important verbatim quote (max 100 words) capturing the essence of the comment.
+
+  rationale: >
+    Brief explanation (1-2 sentences) of the classification selections.
+
+# -------------------------------------------------------------------
+# Fields — the single source of truth for the analysis schema, the LLM
+# prompt, and the report columns/filters/cards. `name` matches the analysis
+# dict key. `show` targets: cards | column | filter | modal (empty = extracted
+# but not surfaced). `options_from` references the shared stances/entity_types
+# lists above. For OMB, state & political are extracted but shown nowhere.
+# -------------------------------------------------------------------
+fields:
+  - name: stances
+    type: multi_enum
+    options_from: stances
+    label: "Position & Concerns"
+    prompt: "Select ALL positions and concerns that apply from the list below (0 or more; exact matches only)."
+    show: [column, filter]
+
+  - name: entity_type
+    type: single_enum
+    options_from: entity_types
+    label: "Entity Type"
+    prompt: "What type of entity is submitting this comment? Choose exactly one from the list below."
+    show: [cards, column, filter]
+
+  - name: entity_name
+    type: quote
+    justifies: entity_type
+    label: "Identified As"
+    prompt: >
+      Extract a VERBATIM quote from the text that justifies the entity type classification.
+      Must be an exact substring from anywhere in the text including submitter name or
+      organization. Leave empty if no identifying information.
+    show: [modal]
+
+  - name: state_identified
+    type: text
+    label: "State"
+    prompt: >
+      If the submitter's US state can be identified from any clue in the text (city/state,
+      institution location, etc.), provide the two-letter abbreviation (e.g. CA, TX). Leave
+      empty if no state can be determined.
+    show: []
+
+  - name: state_quote
+    type: quote
+    justifies: state_identified
+    label: "State Quote"
+    prompt: "Verbatim quote from the text justifying the state identification. Leave empty if no state identified."
+    show: []
+
+  - name: political_affiliation
+    type: enum_or_empty
+    options: ["Republican", "Democrat", "Independent", "Libertarian"]
+    label: "Political"
+    prompt: >
+      ONLY if the submitter explicitly self-identifies their political party (e.g. "as a
+      Republican", "registered Democrat"). Do NOT infer from policy positions. Leave empty
+      if no explicit self-identification.
+    show: []
+
+  - name: political_affiliation_quote
+    type: quote
+    justifies: political_affiliation
+    label: "Political Quote"
+    prompt: "Verbatim quote where the submitter self-identifies their political affiliation. Leave empty if none."
+    show: []
+
+  - name: key_quote
+    type: text
+    label: "Key Quote"
+    prompt: "The most important verbatim quote (max 100 words) capturing the essence of the comment."
+    show: [modal]
+
+  - name: rationale
+    type: text
+    label: "Rationale"
+    prompt: "Brief explanation (1-2 sentences) of the classification selections."
+    show: [modal]
+
+  # Report-time (no LLM): extract CFR section citations from the comment text.
+  # `\b200\.\d{3}\b` also matches the bare number inside "§200.205" / "2 CFR 200.205",
+  # so matches are already normalized to 200.NNN. Complements the cites_section flag.
+  - name: sections_referenced
+    source: regex
+    type: multi_value
+    pattern: '\b200\.\d{3}\b'
+    label: "CFR Section"
+    show: [section, filter]
+
+# -------------------------------------------------------------------
+# General Instructions to the Model
+# -------------------------------------------------------------------
+instructions:
+  - "A comment may express multiple concerns or no clear position"
+  - "Only select items clearly expressed in the comment"
+  - "Be objective and avoid inserting personal opinions"
+  - "For entity type, prioritize explicit self-identification in the comment text over the submitter name"
+  - "Supporting the goals of oversight or fiscal responsibility while opposing the rule is still Oppose"
+
+# -------------------------------------------------------------------
+# Report display — full color palette. Any --color-* token can be set here;
+# omitted keys inherit the house defaults. One-line recolor of the whole report.
+# -------------------------------------------------------------------
+report:
+  source_url: "https://github.com/abigailhaddad/generic-comment-analyzer"
+  comment_url_template: "https://files.nitrd.gov/90-fr-9088/{id}.pdf"
+  docket_url: "https://www.nitrd.gov/coordination-areas/ai/90-fr-9088-responses/"
+  show_submitter_column: false
+  show_position_column: false
+
+quality_gate:
+  enabled: false

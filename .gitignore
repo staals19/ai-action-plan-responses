@@ -102,3 +102,5 @@ CLAUDE.md
 
 # Playwright MCP scratch output from browser-testing the report.
 .playwright-mcp/
+nitrd_responses/
+*.zip

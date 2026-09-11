@@ -147,6 +147,14 @@ def compute_briefing(comments: List[Dict[str, Any]]) -> Dict[str, Any]:
     unclear_count = 0
     concern_counts = {}
     concern_stance = {}  # concern label -> {Oppose, Support, Unclear} split
+    # Stances named "Position: <anything>" that aren't the literal Oppose/Support
+    # pair the built-in stat cards look for (see show_stance_cards below) --
+    # e.g. a regulation whose real axis is "favors deregulation" vs. "favors
+    # stronger safety rules" rather than oppose/support-a-rule. Counted the same
+    # way as concerns, but kept separate since they're a different axis, not a
+    # sub-split of concerns.
+    position_counts = {}
+    no_position_count = 0
     entity_counts = {}
     entity_submitters = {}  # entity_type -> list of {name, org, id}
     state_counts = {}
@@ -195,12 +203,19 @@ def compute_briefing(comments: List[Dict[str, Any]]) -> Dict[str, Any]:
 
         # Position bucket for this comment (reused for the per-concern split).
         pos = comment_position(c)
+        has_named_position = False
         for s in stances:
             if s.startswith('Concern:'):
                 label = s.replace('Concern: ', '')
                 concern_counts[label] = concern_counts.get(label, 0) + 1
                 cs = concern_stance.setdefault(label, {'Oppose': 0, 'Support': 0, 'Unclear': 0})
                 cs[pos] = cs.get(pos, 0) + 1
+            elif s.startswith('Position:'):
+                label = s.replace('Position: ', '')
+                position_counts[label] = position_counts.get(label, 0) + 1
+                has_named_position = True
+        if not has_named_position:
+            no_position_count += 1
 
         entity = analysis.get('entity_type', 'Individual/Other')
         entity_counts[entity] = entity_counts.get(entity, 0) + 1
@@ -267,6 +282,15 @@ def compute_briefing(comments: List[Dict[str, Any]]) -> Dict[str, Any]:
             'oppose': oppose, 'support': support, 'unclear': unclear,
             'oppose_pct': oppose_pct, 'support_pct': support_pct,
         })
+
+    # Sort positions by count descending. Left empty (not even a "No clear
+    # position" bucket) when the config declares no "Position:"-named stances
+    # at all, so a regulation without this axis doesn't get a spurious section
+    # claiming 100% of comments took "No clear position".
+    sorted_positions = sorted(position_counts.items(), key=lambda x: x[1], reverse=True)
+    position_list = [{'name': name, 'count': count, 'pct': display_pct(count, total)} for name, count in sorted_positions]
+    if position_list and no_position_count:
+        position_list.append({'name': 'No clear position', 'count': no_position_count, 'pct': display_pct(no_position_count, total)})
 
     # Sort entities by count descending
     sorted_entities = sorted(entity_counts.items(), key=lambda x: x[1], reverse=True)
@@ -352,6 +376,7 @@ def compute_briefing(comments: List[Dict[str, Any]]) -> Dict[str, Any]:
         'with_attachments': with_attachments,
         'date_range': get_date_range(comments),
         'concern_counts': concern_list,
+        'position_counts': position_list,
         'entity_counts': entity_list,
         'state_counts': sorted(state_counts.items(), key=lambda x: x[1], reverse=True),
         'state_data': {st: subs[:200] for st, subs in state_comments.items()},
@@ -1344,6 +1369,23 @@ def generate_html(comments: List[Dict[str, Any]], stats: Dict[str, Any], field_a
     accent_rgb = _hex_to_rgb(colors['accent'])
     source_url = report_config.get('source_url') or None
     full_export_url = (report_config.get('full_export') or {}).get('url') or None
+    # Where the report's "ID" links and docket header link point. Both default to
+    # regulations.gov, since that is where a bulk-export CSV normally comes from;
+    # a regulation sourced elsewhere (e.g. an RFI whose responses are posted as
+    # one PDF per submission on the agency's own site) overrides these in
+    # analyzer_config.yaml's `report:` block rather than patching this file.
+    comment_url_template = report_config.get('comment_url_template') or 'https://www.regulations.gov/comment/{id}'
+    docket_url = report_config.get('docket_url') or f"https://www.regulations.gov/docket/{metadata.get('docket_id', '')}"
+    # A source with no separate submitter/organization field (everything is
+    # embedded in the attachment text instead) can turn this column off rather
+    # than show a column of "Anonymous" for every row.
+    show_submitter_column = report_config.get('show_submitter_column', True)
+    # The Position and Concerns columns both come from the same `stances` field
+    # (split at render time by the "Position:"/"Concern:" name prefix), so the
+    # config's stances.show can only turn both on or off together. A regulation
+    # whose stances are all concerns, with no oppose/support axis worth a column
+    # of its own, can turn Position off here without losing the Concerns column.
+    show_position_column = report_config.get('show_position_column', True)
     fields = load_fields()
     field_meta = compute_field_meta(fields, report_config)
     show_stance_cards = 'cards' in field_meta.get('stances', {}).get('show', [])
@@ -1406,6 +1448,10 @@ def generate_html(comments: List[Dict[str, Any]], stats: Dict[str, Any], field_a
         show_stance_cards=show_stance_cards,
         show_entity_cards=show_entity_cards,
         show_cosigners=show_cosigners,
+        comment_url_template=comment_url_template,
+        docket_url=docket_url,
+        show_submitter_column=show_submitter_column,
+        show_position_column=show_position_column,
         rule_page_url=rule_page_url,
         source_url=source_url,
         full_export_url=full_export_url,
