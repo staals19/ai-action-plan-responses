@@ -1,4 +1,42 @@
-# generic-comment-analyzer
+The current version of this report can be found here: https://staals19.github.io/ai-action-plan-responses/
+
+# ai-action-plan-responses
+
+## Get the data
+Download the combined PDF of responses from NITRD's page: https://www.nitrd.gov/coordination-areas/ai/90-fr-9088-responses/. Unzip it into a `nitrd_responses` folder at the repo root:
+```
+unzip 90-fr-9088-combined-responses.zip -d nitrd_responses/
+```
+
+## Set up the environment
+```
+python -m venv myenv && source myenv/bin/activate
+pip install -r requirements.txt
+echo "OPENAI_API_KEY=sk-..." > .env
+```
+
+## Convert the PDFs into a CSV (source.csv)
+```
+python build_source_csv.py
+```
+
+## Run the analysis
+```
+python pipeline.py --regulation ai-action-plan --no-verify
+```
+`--no-verify` skips the optional second-pass LLM check of ambiguous classifications. It relies on a strict support/oppose framework that does not apply to this case. See `entity_types`, `entity_classification_rules`, and `stances` in `analyzer_config.yaml` for how this regulation's categories are defined.
+
+## Generate the report
+```
+cd regulations/ai-action-plan
+python ../../generate_report.py --parquet full_run.parquet
+open index.html
+```
+
+
+# Original README for generic-comment-analyzer
+
+## generic-comment-analyzer
 
 A regulation-agnostic pipeline for analyzing public comments on U.S. federal
 regulations (regulations.gov). It classifies each comment's position and concerns,
