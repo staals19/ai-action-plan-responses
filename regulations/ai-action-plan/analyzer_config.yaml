@@ -32,6 +32,7 @@ stances:
 # -------------------------------------------------------------------
 entity_types:
   - "Individual/Other"
+  - "Firm (Industry or Technology Company)"
   - "Think tanks/university research groups/research institutions and universities"
   - "Non-profits/NGOs/charities"
   - "Business/trade associations"
